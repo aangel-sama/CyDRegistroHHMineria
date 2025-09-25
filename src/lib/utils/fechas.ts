@@ -6,7 +6,7 @@
  * @returns Arreglo de 5 fechas (lunes a viernes)
  */
 
-import { FERIADOS } from './feriados';
+import { FERIADOS } from "./feriados";
 
 export function esFeriado(fecha: string): boolean {
   // Comprueba si la fecha (ISO) se encuentra en la lista de feriados
@@ -28,18 +28,14 @@ export function obtenerFechasSemana(offsetSemanas = 0): string[] {
   const lunes = new Date(fechaBase);
   lunes.setDate(fechaBase.getDate() - distanciaAlLunes);
 
-  // Generar 5 días desde el lunes
-  return Array.from({ length: 5 }, (_, i) => {
+  // Generar 4 días desde el lunes (lunes a jueves)
+  return Array.from({ length: 4 }, (_, i) => {
     const d = new Date(lunes);
     d.setDate(lunes.getDate() + i);
     d.setHours(12); // Aseguramos que esté al mediodía local
-    return d.toISOString().split('T')[0]; // yyyy-mm-dd
+    return d.toISOString().split("T")[0]; // yyyy-mm-dd
   });
 }
-
-
-
-
 
 /**
  * Devuelve un texto formateado como "Semana del dd/mm al dd/mm"
@@ -47,16 +43,18 @@ export function obtenerFechasSemana(offsetSemanas = 0): string[] {
  * @returns Texto legible
  */
 export function formatoSemana(desdeISO: string): string {
-  const d = new Date(desdeISO);       // Lunes
-  const f = new Date(d); f.setDate(d.getDate() + 4); // Viernes
+  const d = new Date(desdeISO); // Lunes
+  const f = new Date(d);
+  f.setDate(d.getDate() + 3); // Jueves
 
   const fmt = (x: Date) =>
-    `${x.getDate().toString().padStart(2, '0')}/${(x.getMonth() + 1).toString().padStart(2, '0')}`;
+    `${x.getDate().toString().padStart(2, "0")}/${(x.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}`;
 
   return `Semana del ${fmt(d)} al ${fmt(f)}`;
 }
 
 export function obtenerFechasHabilesSemana(offset = 0): string[] {
-  return obtenerFechasSemana(offset).filter(f => !esFeriado(f));
+  return obtenerFechasSemana(offset).filter((f) => !esFeriado(f));
 }
-
