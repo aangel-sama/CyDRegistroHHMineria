@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"  
+     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <path stroke-linecap="round" stroke-linejoin="round"
+        d="M13.875 18.825A10.05 10.05 0 0112 19
+           c-4.478 0-8.268-2.943-9.542-7
+           a9.957 9.957 0 011.051-2.287" />
+  <path stroke-linecap="round" stroke-linejoin="round"
+        d="M6.343 6.343A9.97 9.97 0 0112 5
+           c4.478 0 8.268 2.943 9.542 7
+           a9.957 9.957 0 01-1.051 2.287" />
+  <path stroke-linecap="round" stroke-linejoin="round"
+        d="M3 3l18 18" />
+  <path stroke-linecap="round" stroke-linejoin="round"
+        d="M10.477 10.477a3 3 0 014.243 4.243" />
+</svg>
