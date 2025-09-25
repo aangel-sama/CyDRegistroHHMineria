@@ -3,14 +3,7 @@
 // lib/utils/registerVacation.ts
 
 import { supabase } from "../supabaseClient";
-import {
-  eachDayOfInterval,
-  format,
-  isFriday,
-  isWeekend,
-  startOfWeek,
-  parseISO,
-} from "date-fns";
+import { eachDayOfInterval, format, startOfWeek, parseISO } from "date-fns";
 import { esFeriado } from "../utils/feriados";
 import { insertarOActualizarRegistro } from "../service/registroService";
 
