@@ -63,7 +63,7 @@ export async function registerVacation({
 
   // 3) Determina el proyecto clave según motivo
   const proyectoClave =
-    motivo === "Vacaciones" ? "GIN-2-Vacaciones" : "GIN-2-Licencias";
+    motivo === "Vacaciones" ? "GMI-Vacaciones" : "GMI-Licencias";
 
   // 4) Calcula el estado general:
   //    - Si la semana de inicio es anterior a la actual → Enviado
