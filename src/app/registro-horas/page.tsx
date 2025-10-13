@@ -186,11 +186,81 @@ export default function RegistroHoras() {
   };
 
   /* ───────────────────────────────
+     Validaciones antes del envío
+  ─────────────────────────────── */
+  // Función que valida todas las condiciones antes de permitir el envío
+  const validarAntesDeEnviar = () => {
+    const errores: string[] = [];
+
+    // 1. Verificar límites diarios
+    for (let i = 0; i < dias.length; i++) {
+      const diaNombre = dias[i];
+      const limite = diaNombre === "Jueves" ? 8 : 12;
+      const totalDia = proyectos.reduce(
+        (acc, p) => acc + (horas[p]?.[diaNombre] || 0),
+        0
+      );
+
+      if (totalDia > limite) {
+        errores.push(
+          `${diaNombre}: ${totalDia}h registradas (máximo ${limite}h)`
+        );
+      }
+    }
+
+    // 2. Verificar horas mínimas requeridas
+    const tot = proyectos.reduce(
+      (s, p) => s + dias.reduce((s2, d) => s2 + (horas[p]?.[d] || 0), 0),
+      0
+    );
+    const horasEsperadas = fechasSemana.reduce((t, f, idx) => {
+      if (esFeriado(f)) return t;
+      return t + (idx === 3 ? 8 : 12); // jueves es el índice 3
+    }, 0);
+
+    if (tot < horasEsperadas) {
+      errores.push(
+        `Horas insuficientes: ${tot.toFixed(
+          1
+        )}h registradas (mínimo ${horasEsperadas}h)`
+      );
+    }
+
+    // 3. Verificar que no haya días con 0 horas cuando debería haber
+    for (let i = 0; i < dias.length; i++) {
+      const fechaDia = fechasSemana[i];
+      if (esFeriado(fechaDia)) continue; // Saltar feriados
+
+      const diaNombre = dias[i];
+      const totalDia = proyectos.reduce(
+        (acc, p) => acc + (horas[p]?.[diaNombre] || 0),
+        0
+      );
+
+      if (totalDia === 0) {
+        errores.push(`${diaNombre}: No hay horas registradas`);
+      }
+    }
+
+    return errores;
+  };
+
+  /* ───────────────────────────────
      Guardar o enviar registros
   ─────────────────────────────── */
   // Guarda los datos ingresados en Supabase. Dependiendo del estado indicado se
   // considerarán borradores o se marcarán como enviados.
   const persistir = async (estado: "Borrador" | "Enviado") => {
+    // VALIDACIÓN ADICIONAL: Si es envío, verificar una vez más antes de persistir
+    if (estado === "Enviado") {
+      const errores = validarAntesDeEnviar();
+      if (errores.length > 0) {
+        setMensajeError(`Error de validación: ${errores.join(", ")}`);
+        setMensajeExito("");
+        return;
+      }
+    }
+
     for (const p of proyectos) {
       for (let i = 0; i < dias.length; i++) {
         const fechaDia = fechasSemana[i];
@@ -265,7 +335,7 @@ export default function RegistroHoras() {
             >
               ×
             </button>
-            {mensajeError}
+            <div className="whitespace-pre-line">{mensajeError}</div>
           </div>
         )}
 
@@ -386,26 +456,19 @@ export default function RegistroHoras() {
                 return;
               }
 
-              const tot = proyectos.reduce(
-                (s, p) =>
-                  s + dias.reduce((s2, d) => s2 + (horas[p]?.[d] || 0), 0),
-                0
-              );
-              const horasEsperadas = fechasSemana.reduce((t, f, idx) => {
-                if (esFeriado(f)) return t;
-                return t + (idx === 3 ? 8 : 12); // jueves es el índice 3
-              }, 0);
+              // DOBLE VERIFICACIÓN: Validar todas las condiciones antes del envío
+              const errores = validarAntesDeEnviar();
 
-              if (tot < horasEsperadas) {
-                setMensajeError(
-                  `Debes completar al menos ${horasEsperadas} h. Actualmente llevas ${tot.toFixed(
-                    1
-                  )} h.`
-                );
+              if (errores.length > 0) {
+                const mensajeError = `No se puede enviar el registro:\n• ${errores.join(
+                  "\n• "
+                )}`;
+                setMensajeError(mensajeError);
                 setMensajeExito("");
                 return;
               }
 
+              // Si todas las validaciones pasan, proceder con el envío
               persistir("Enviado");
               setMensajeExito("Semana enviada correctamente.");
             }}
