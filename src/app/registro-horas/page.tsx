@@ -246,6 +246,84 @@ export default function RegistroHoras() {
   };
 
   /* ───────────────────────────────
+     Limpieza de registros Borrador
+  ─────────────────────────────── */
+  // Fuerza la actualización de todos los registros Borrador a Enviado
+  const limpiarRegistrosBorrador = async (correoUsuario: string) => {
+    try {
+      const registrosSemana = await obtenerRegistros(
+        correoUsuario,
+        fechasSemana
+      );
+      const registrosBorrador = registrosSemana.filter(
+        (r) => r.estado === "Borrador"
+      );
+
+      if (registrosBorrador.length === 0) {
+        return { exito: true, procesados: 0 };
+      }
+
+      console.log(
+        `🔄 Limpiando ${registrosBorrador.length} registros Borrador...`
+      );
+
+      // Actualizar cada registro Borrador a Enviado
+      for (const registro of registrosBorrador) {
+        await insertarOActualizarRegistro(
+          correoUsuario,
+          registro.proyecto,
+          registro.fecha,
+          registro.horas,
+          "Enviado"
+        );
+      }
+
+      return { exito: true, procesados: registrosBorrador.length };
+    } catch (error) {
+      console.error("Error limpiando registros Borrador:", error);
+      return { exito: false, procesados: 0 };
+    }
+  };
+
+  /* ───────────────────────────────
+     Verificación post-envío
+  ─────────────────────────────── */
+  // Verifica que todos los registros de la semana estén en estado "Enviado"
+  const verificarEstadoEnviado = async (correoUsuario: string) => {
+    try {
+      const registrosSemana = await obtenerRegistros(
+        correoUsuario,
+        fechasSemana
+      );
+      const registrosBorrador = registrosSemana.filter(
+        (r) => r.estado === "Borrador"
+      );
+
+      if (registrosBorrador.length > 0) {
+        console.error(
+          "Registros que no cambiaron a Enviado:",
+          registrosBorrador
+        );
+        return {
+          exito: false,
+          mensaje: `Error: ${registrosBorrador.length} registro(s) siguen en estado Borrador`,
+        };
+      }
+
+      return {
+        exito: true,
+        mensaje: "Todos los registros cambiaron a Enviado correctamente",
+      };
+    } catch (error) {
+      console.error("Error verificando estado:", error);
+      return {
+        exito: false,
+        mensaje: "Error verificando el cambio de estado",
+      };
+    }
+  };
+
+  /* ───────────────────────────────
      Guardar o enviar registros
   ─────────────────────────────── */
   // Guarda los datos ingresados en Supabase. Dependiendo del estado indicado se
@@ -290,6 +368,36 @@ export default function RegistroHoras() {
     }
 
     if (estado === "Enviado") {
+      // LIMPIEZA PREVIA: Asegurar que todos los registros Borrador cambien a Enviado
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user?.email) {
+        // Primero limpiar registros Borrador que puedan haber quedado
+        const limpieza = await limpiarRegistrosBorrador(user.email);
+
+        if (limpieza.procesados > 0) {
+          console.log(
+            `✅ Limpieza completada: ${limpieza.procesados} registros actualizados`
+          );
+        }
+
+        // Luego verificar que todo esté correcto
+        const verificacion = await verificarEstadoEnviado(user.email);
+
+        if (!verificacion.exito) {
+          setMensajeError(
+            `⚠️ ${verificacion.mensaje}. Intenta enviar nuevamente.`
+          );
+          setMensajeExito("");
+          console.error("Error en verificación post-envío:", verificacion);
+          return;
+        }
+
+        console.log("✅ Verificación exitosa:", verificacion.mensaje);
+      }
+
       setEstadoEnvio("Enviado");
       setBloquear(true);
       setMensajeExito("Registro enviado correctamente.");
