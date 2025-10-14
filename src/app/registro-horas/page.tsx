@@ -70,6 +70,12 @@ export default function RegistroHoras() {
   // Estado para indicar si la semana anterior ya fue enviada
   const [prevWeekSent, setPrevWeekSent] = useState(false);
 
+  // Estado de carga para evitar múltiples envíos/guardados simultáneos
+  const [isSaving, setIsSaving] = useState(false);
+  const [savingAccion, setSavingAccion] = useState<
+    "Borrador" | "Enviado" | null
+  >(null);
+
   /* ───────────────────────────────
      Efecto de inicialización
   ─────────────────────────────── */
@@ -429,6 +435,19 @@ export default function RegistroHoras() {
     <div className="flex bg-[#ffffff] min-h-screen">
       <Sidebar />
       <main className="ml-64 flex-1 px-10 py-8 overflow-y-auto max-h-screen">
+        {/* Overlay de carga bloqueante */}
+        {isSaving && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-lg shadow-lg px-6 py-5 flex items-center gap-3">
+              <div className="h-6 w-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+              <span className="text-gray-800 font-medium">
+                {savingAccion === "Enviado"
+                  ? "Enviando registro..."
+                  : "Guardando borrador..."}
+              </span>
+            </div>
+          </div>
+        )}
         <h1 className="text-3xl font-bold text-[#212121] mb-6">
           Registro de Horas
         </h1>
@@ -534,7 +553,8 @@ export default function RegistroHoras() {
         <div className="flex justify-end w-full gap-4 mt-6">
           {/* BOTÓN GUARDAR BORRADOR */}
           <button
-            onClick={() => {
+            disabled={bloquear || isSaving}
+            onClick={async () => {
               if (bloquear) {
                 setMensajeError("Registro ya enviado.");
                 setMensajeExito("");
@@ -545,11 +565,17 @@ export default function RegistroHoras() {
               setMensajeError("");
               setMensajeExito("");
 
-              persistir("Borrador");
-              setMensajeExito("Borrador guardado.");
+              try {
+                setIsSaving(true);
+                setSavingAccion("Borrador");
+                await persistir("Borrador");
+              } finally {
+                setIsSaving(false);
+                setSavingAccion(null);
+              }
             }}
             className={`btn-outline ${
-              bloquear ? "opacity-50 cursor-not-allowed" : ""
+              bloquear || isSaving ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
             Guardar borrador
@@ -557,7 +583,8 @@ export default function RegistroHoras() {
 
           {/* BOTÓN ENVIAR REGISTRO */}
           <button
-            onClick={() => {
+            disabled={bloquear || isSaving}
+            onClick={async () => {
               if (bloquear) {
                 setMensajeError("Registro ya enviado.");
                 setMensajeExito("");
@@ -577,11 +604,17 @@ export default function RegistroHoras() {
               }
 
               // Si todas las validaciones pasan, proceder con el envío
-              persistir("Enviado");
-              setMensajeExito("Semana enviada correctamente.");
+              try {
+                setIsSaving(true);
+                setSavingAccion("Enviado");
+                await persistir("Enviado");
+              } finally {
+                setIsSaving(false);
+                setSavingAccion(null);
+              }
             }}
             className={`btn-primary ${
-              bloquear ? "opacity-50 cursor-not-allowed" : ""
+              bloquear || isSaving ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
             Enviar registro
