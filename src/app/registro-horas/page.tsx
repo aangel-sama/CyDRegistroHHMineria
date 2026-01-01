@@ -70,6 +70,12 @@ export default function RegistroHoras() {
   // Estado para indicar si la semana anterior ya fue enviada
   const [prevWeekSent, setPrevWeekSent] = useState(false);
 
+  // Estado de carga para evitar múltiples envíos/guardados simultáneos
+  const [isSaving, setIsSaving] = useState(false);
+  const [savingAccion, setSavingAccion] = useState<
+    "Borrador" | "Enviado" | null
+  >(null);
+
   /* ───────────────────────────────
      Efecto de inicialización
   ─────────────────────────────── */
@@ -192,11 +198,159 @@ export default function RegistroHoras() {
   };
 
   /* ───────────────────────────────
+     Validaciones antes del envío
+  ─────────────────────────────── */
+  // Función que valida todas las condiciones antes de permitir el envío
+  const validarAntesDeEnviar = () => {
+    const errores: string[] = [];
+
+    // 1. Verificar límites diarios
+    for (let i = 0; i < dias.length; i++) {
+      const diaNombre = dias[i];
+      const limite = diaNombre === "Jueves" ? 8 : 12;
+      const totalDia = proyectos.reduce(
+        (acc, p) => acc + (horas[p]?.[diaNombre] || 0),
+        0
+      );
+
+      if (totalDia > limite) {
+        errores.push(
+          `${diaNombre}: ${totalDia}h registradas (máximo ${limite}h)`
+        );
+      }
+    }
+
+    // 2. Verificar horas mínimas requeridas
+    const tot = proyectos.reduce(
+      (s, p) => s + dias.reduce((s2, d) => s2 + (horas[p]?.[d] || 0), 0),
+      0
+    );
+    const horasEsperadas = fechasSemana.reduce((t, f, idx) => {
+      if (esFeriado(f)) return t;
+      return t + (idx === 3 ? 8 : 12); // jueves es el índice 3
+    }, 0);
+
+    if (tot < horasEsperadas) {
+      errores.push(
+        `Horas insuficientes: ${tot.toFixed(
+          1
+        )}h registradas (mínimo ${horasEsperadas}h)`
+      );
+    }
+
+    // 3. Verificar que no haya días con 0 horas cuando debería haber
+    for (let i = 0; i < dias.length; i++) {
+      const fechaDia = fechasSemana[i];
+      if (esFeriado(fechaDia)) continue; // Saltar feriados
+
+      const diaNombre = dias[i];
+      const totalDia = proyectos.reduce(
+        (acc, p) => acc + (horas[p]?.[diaNombre] || 0),
+        0
+      );
+
+      if (totalDia === 0) {
+        errores.push(`${diaNombre}: No hay horas registradas`);
+      }
+    }
+
+    return errores;
+  };
+
+  /* ───────────────────────────────
+     Limpieza de registros Borrador
+  ─────────────────────────────── */
+  // Fuerza la actualización de todos los registros Borrador a Enviado
+  const limpiarRegistrosBorrador = async (correoUsuario: string) => {
+    try {
+      const registrosSemana = await obtenerRegistros(
+        correoUsuario,
+        fechasSemana
+      );
+      const registrosBorrador = registrosSemana.filter(
+        (r) => r.estado === "Borrador"
+      );
+
+      if (registrosBorrador.length === 0) {
+        return { exito: true, procesados: 0 };
+      }
+
+      console.log(
+        `🔄 Limpiando ${registrosBorrador.length} registros Borrador...`
+      );
+
+      // Actualizar cada registro Borrador a Enviado
+      for (const registro of registrosBorrador) {
+        await insertarOActualizarRegistro(
+          correoUsuario,
+          registro.proyecto,
+          registro.fecha,
+          registro.horas,
+          "Enviado"
+        );
+      }
+
+      return { exito: true, procesados: registrosBorrador.length };
+    } catch (error) {
+      console.error("Error limpiando registros Borrador:", error);
+      return { exito: false, procesados: 0 };
+    }
+  };
+
+  /* ───────────────────────────────
+     Verificación post-envío
+  ─────────────────────────────── */
+  // Verifica que todos los registros de la semana estén en estado "Enviado"
+  const verificarEstadoEnviado = async (correoUsuario: string) => {
+    try {
+      const registrosSemana = await obtenerRegistros(
+        correoUsuario,
+        fechasSemana
+      );
+      const registrosBorrador = registrosSemana.filter(
+        (r) => r.estado === "Borrador"
+      );
+
+      if (registrosBorrador.length > 0) {
+        console.error(
+          "Registros que no cambiaron a Enviado:",
+          registrosBorrador
+        );
+        return {
+          exito: false,
+          mensaje: `Error: ${registrosBorrador.length} registro(s) siguen en estado Borrador`,
+        };
+      }
+
+      return {
+        exito: true,
+        mensaje: "Todos los registros cambiaron a Enviado correctamente",
+      };
+    } catch (error) {
+      console.error("Error verificando estado:", error);
+      return {
+        exito: false,
+        mensaje: "Error verificando el cambio de estado",
+      };
+    }
+  };
+
+  /* ───────────────────────────────
      Guardar o enviar registros
   ─────────────────────────────── */
   // Guarda los datos ingresados en Supabase. Dependiendo del estado indicado se
   // considerarán borradores o se marcarán como enviados.
   const persistir = async (estado: "Borrador" | "Enviado") => {
+    // VALIDACIÓN ADICIONAL: Si es envío, verificar una vez más antes de persistir
+    if (estado === "Enviado") {
+      const errores = validarAntesDeEnviar();
+      if (errores.length > 0) {
+        setMensajeError(`Error de validación: ${errores.join(", ")}`);
+        setMensajeExito("");
+        return;
+      }
+    }
+
     for (const p of proyectos) {
       for (let i = 0; i < dias.length; i++) {
         const fechaDia = fechasSemana[i];
@@ -229,6 +383,36 @@ export default function RegistroHoras() {
     }
 
     if (estado === "Enviado") {
+      // LIMPIEZA PREVIA: Asegurar que todos los registros Borrador cambien a Enviado
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user?.email) {
+        // Primero limpiar registros Borrador que puedan haber quedado
+        const limpieza = await limpiarRegistrosBorrador(user.email);
+
+        if (limpieza.procesados > 0) {
+          console.log(
+            `✅ Limpieza completada: ${limpieza.procesados} registros actualizados`
+          );
+        }
+
+        // Luego verificar que todo esté correcto
+        const verificacion = await verificarEstadoEnviado(user.email);
+
+        if (!verificacion.exito) {
+          setMensajeError(
+            `⚠️ ${verificacion.mensaje}. Intenta enviar nuevamente.`
+          );
+          setMensajeExito("");
+          console.error("Error en verificación post-envío:", verificacion);
+          return;
+        }
+
+        console.log("✅ Verificación exitosa:", verificacion.mensaje);
+      }
+
       setEstadoEnvio("Enviado");
       setBloquear(true);
       setMensajeExito("Registro enviado correctamente.");
@@ -260,6 +444,19 @@ export default function RegistroHoras() {
     <div className="flex bg-[#ffffff] min-h-screen">
       <Sidebar />
       <main className="ml-64 flex-1 px-10 py-8 overflow-y-auto max-h-screen">
+        {/* Overlay de carga bloqueante */}
+        {isSaving && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-lg shadow-lg px-6 py-5 flex items-center gap-3">
+              <div className="h-6 w-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+              <span className="text-gray-800 font-medium">
+                {savingAccion === "Enviado"
+                  ? "Enviando registro..."
+                  : "Guardando borrador..."}
+              </span>
+            </div>
+          </div>
+        )}
         <h1 className="text-3xl font-bold text-[#212121] mb-6">
           Registro de Horas
         </h1>
@@ -274,7 +471,7 @@ export default function RegistroHoras() {
             >
               ×
             </button>
-            {mensajeError}
+            <div className="whitespace-pre-line">{mensajeError}</div>
           </div>
         )}
 
@@ -365,7 +562,8 @@ export default function RegistroHoras() {
         <div className="flex justify-end w-full gap-4 mt-6">
           {/* BOTÓN GUARDAR BORRADOR */}
           <button
-            onClick={() => {
+            disabled={bloquear || isSaving}
+            onClick={async () => {
               if (bloquear) {
                 setMensajeError("Registro ya enviado.");
                 setMensajeExito("");
@@ -376,11 +574,17 @@ export default function RegistroHoras() {
               setMensajeError("");
               setMensajeExito("");
 
-              persistir("Borrador");
-              setMensajeExito("Borrador guardado.");
+              try {
+                setIsSaving(true);
+                setSavingAccion("Borrador");
+                await persistir("Borrador");
+              } finally {
+                setIsSaving(false);
+                setSavingAccion(null);
+              }
             }}
             className={`btn-outline ${
-              bloquear ? "opacity-50 cursor-not-allowed" : ""
+              bloquear || isSaving ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
             Guardar borrador
@@ -388,7 +592,8 @@ export default function RegistroHoras() {
 
           {/* BOTÓN ENVIAR REGISTRO */}
           <button
-            onClick={() => {
+            disabled={bloquear || isSaving}
+            onClick={async () => {
               if (bloquear) {
                 setMensajeError("Registro ya enviado.");
                 setMensajeExito("");
@@ -422,11 +627,18 @@ export default function RegistroHoras() {
                 return;
               }
 
-              persistir("Enviado");
-              setMensajeExito("Semana enviada correctamente.");
+              // Si todas las validaciones pasan, proceder con el envío
+              try {
+                setIsSaving(true);
+                setSavingAccion("Enviado");
+                await persistir("Enviado");
+              } finally {
+                setIsSaving(false);
+                setSavingAccion(null);
+              }
             }}
             className={`btn-primary ${
-              bloquear ? "opacity-50 cursor-not-allowed" : ""
+              bloquear || isSaving ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
             Enviar registro
