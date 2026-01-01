@@ -165,6 +165,12 @@ export default function RegistroHoras() {
     const fechaDia = fechasSemana[idxDia];
     if (new Date(fechaDia) > new Date()) return;
 
+    // Validar que no sea día feriado
+    if (esFeriado(fechaDia)) {
+      setMensajeError("No se pueden registrar horas en días feriados.");
+      return;
+    }
+
     const diaNombre = dias[idxDia];
     const limite = diaNombre === "Jueves" ? 8 : 12;
     const totalDia = proyectos.reduce(
@@ -195,6 +201,9 @@ export default function RegistroHoras() {
       for (let i = 0; i < dias.length; i++) {
         const fechaDia = fechasSemana[i];
         if (estado === "Borrador" && new Date(fechaDia) > new Date()) continue;
+
+        // No guardar horas en días feriados
+        if (esFeriado(fechaDia)) continue;
 
         const fecha = fechasSemana[i];
         const horasDia = horas[p][dias[i]] || 0;
@@ -386,11 +395,18 @@ export default function RegistroHoras() {
                 return;
               }
 
-              const tot = proyectos.reduce(
-                (s, p) =>
-                  s + dias.reduce((s2, d) => s2 + (horas[p]?.[d] || 0), 0),
-                0
-              );
+              // Calcular total excluyendo días feriados para validación consistente
+              const tot = proyectos.reduce((s, p) => {
+                return (
+                  s +
+                  dias.reduce((s2, d, idx) => {
+                    const fechaDia = fechasSemana[idx];
+                    // Excluir horas de días feriados del total
+                    if (fechaDia && esFeriado(fechaDia)) return s2;
+                    return s2 + (horas[p]?.[d] || 0);
+                  }, 0)
+                );
+              }, 0);
               const horasEsperadas = fechasSemana.reduce((t, f, idx) => {
                 if (esFeriado(f)) return t;
                 return t + (idx === 3 ? 8 : 12); // jueves es el índice 3

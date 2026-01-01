@@ -6,11 +6,12 @@
  * @returns Arreglo de 5 fechas (lunes a viernes)
  */
 
-import { FERIADOS } from "./feriados";
+import { esFeriado as esFeriadoDate } from "./feriados";
 
 export function esFeriado(fecha: string): boolean {
-  // Comprueba si la fecha (ISO) se encuentra en la lista de feriados
-  return FERIADOS.includes(fecha);
+  // Comprueba si la fecha (ISO) es feriado usando la función dinámica
+  const fechaDate = new Date(fecha + "T12:00:00"); // Mediodía para evitar problemas de zona horaria
+  return esFeriadoDate(fechaDate);
 }
 
 export function obtenerFechasSemana(offsetSemanas = 0): string[] {
